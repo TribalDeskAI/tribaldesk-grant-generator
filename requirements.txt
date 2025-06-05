@@ -1,4 +1,3 @@
 streamlit
 openai
 docxtpl
-update requirements for chat + AI
