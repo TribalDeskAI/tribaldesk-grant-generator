@@ -1,105 +1,37 @@
-import streamlit as st
-import os
+from openai import OpenAI
 
-# ========== Optional OpenAI Setup ==========
-USE_AI = "OPENAI_API_KEY" in st.secrets or os.getenv("OPENAI_API_KEY")
+def chat_assistant():
+    st.title("🧠 TribalDeskAI Chat Assistant")
+    st.write("Ask a question about grants, proposals, tribal funding, or startup support.")
 
-if USE_AI:
-    import openai
-    openai.api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else os.getenv("OPENAI_API_KEY")
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-    def ask_gpt(prompt):
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful tribal grant advisor."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=300
-            )
-            return response.choices[0].message["content"]
-        except Exception as e:
-            return f"Error: {e}"
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
 
-# ========== Layout Setup ==========
-st.set_page_config(page_title="TribalDeskAI", layout="wide")
-page = st.sidebar.selectbox("Choose a tool", ["🧠 Chat Assistant", "📝 Proposal Generator"])
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-# ========== Page 1: Chat Assistant ==========
-if page == "🧠 Chat Assistant":
-    st.title("🤖 TribalDeskAI Chat Assistant")
-    st.write("Ask about grant eligibility, get help writing proposals, or begin the guided assistant.")
-
-    for sender, msg in st.session_state.chat_history:
-        st.chat_message(sender).write(msg)
-
-    user_input = st.chat_input("Ask a question or say 'start guide'...")
+    user_input = st.text_input("You:", placeholder="Ask me anything...")
 
     if user_input:
-        st.chat_message("user").write(user_input)
-        st.session_state.chat_history.append(("user", user_input))
+        # Add user's message to chat history
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-        if "start guide" in user_input.lower():
-            st.chat_message("assistant").write("Great! Let’s begin. What’s your organization or tribe’s name?")
-            with st.form("guided_form"):
-                org = st.text_input("Organization Name")
-                area = st.selectbox("Focus Area", ["Education", "Health", "Economic Development", "Culture", "Other"])
-                need = st.text_area("Brief Description of Your Funding Need")
-                submitted = st.form_submit_button("Continue")
-                if submitted:
-                    reply = f"Thanks! I’ll start looking for grants related to **{area}** and help you build a proposal for: _{need}_"
-                    st.chat_message("assistant").write(reply)
-                    st.session_state.chat_history.append(("assistant", reply))
+        # Call OpenAI API
+        try:
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=st.session_state.chat_history
+            )
 
-        elif USE_AI:
-            ai_reply = ask_gpt(user_input)
-            st.chat_message("assistant").write(ai_reply)
-            st.session_state.chat_history.append(("assistant", ai_reply))
+            assistant_reply = response.choices[0].message.content
+            st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
+        except Exception as e:
+            assistant_reply = f"⚠️ Error: {str(e)}"
+            st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
 
+    # Display the conversation
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "user":
+            st.markdown(f"**You:** {msg['content']}")
         else:
-            fallback = "I'm still learning! You can say 'start guide' to begin a walk-through."
-            st.chat_message("assistant").write(fallback)
-            st.session_state.chat_history.append(("assistant", fallback))
+            st.markdown(f"**Assistant:** {msg['content']}")
 
-# ========== Page 2: Proposal Generator ==========
-elif page == "📝 Proposal Generator":
-    st.title("📄 Grant Proposal Generator")
-    st.write("Complete the form to generate a basic grant proposal.")
-
-    with st.form("proposal_form"):
-        org = st.text_input("Organization/Tribe Name")
-        contact = st.text_input("Contact Person")
-        email = st.text_input("Email Address")
-        project = st.text_area("Project Description")
-        goals = st.text_area("Project Goals")
-        target = st.text_input("Target Audience")
-        amount = st.text_input("Funding Requested")
-
-        submitted = st.form_submit_button("Generate Proposal")
-
-        if submitted:
-            st.subheader("Your Proposal")
-            proposal = f"""
-## Grant Proposal for {org}
-
-**Contact:** {contact} ({email})
-
-**Project Description:**  
-{project}
-
-**Goals:**  
-{goals}
-
-**Target Audience:**  
-{target}
-
-**Requested Amount:**  
-${amount}
-
-_Generated by TribalDeskAI_
-            """
-            st.code(proposal, language="markdown")
